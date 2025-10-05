@@ -20,6 +20,13 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+/* Sleeping threads massive - is static 
+then we need to limit threads */
+#define MAX_SLEEPING_THREADS 100
+
+static struct sleeping_threads sleeping_list[MAX_SLEEPING_THREADS];
+static size_t sleep_count = 0; // Counter for sleeping threads
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -71,6 +78,64 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+/* Functions to control sleeping threads massive */
+/* Function to insert new thread to sleeping_list */
+void insert_sleeping_thread(struct thread* thread, int64_t wakeup_time)
+{
+  ASSERT(intr_get_level()==INTR_OFF);
+
+  if (sleep_count >= MAX_SLEEPING_THREADS)
+  {
+    PANIC("too much sleeping threads!");
+  }
+
+  size_t i = sleep_count; // i - index for insert new sleeping thread
+  while (i > 0 && sleeping_list[i-1].wakeup_time > wakeup_time)
+  {
+    sleeping_list[i] = sleeping_list[i-1];
+    i--;
+  }
+
+  sleeping_list[i].thread = thread;
+  sleeping_list[i].wakeup_time = wakeup_time;
+  sleep_count++;
+};
+
+/* Function to delete aweked threads */
+static void delete_aweken_threads(int64_t current_tick)
+{
+  ASSERT(intr_get_level()==INTR_OFF);
+
+  size_t i = 0;
+  while (i < sleep_count && sleeping_list[i].wakeup_time <= current_tick)
+  {
+    thread_unblock(sleeping_list[i].thread);
+    i++;
+  }
+  if (i > 0)
+  {
+    for (size_t j = 0; j < sleep_count-i; j++)
+    {
+      sleeping_list[j] = sleeping_list[i+j];
+    }
+  }
+  sleep_count -= i;
+}
+
+static void 
+thread_sleep_init(void)
+{
+  sleep_count = 0;
+}
+
+void
+thread_wakeup(int64_t current_tick)
+{
+  enum intr_level old_level = intr_disable();
+  delete_aweken_threads(current_tick);
+  intr_set_level(old_level);
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -89,6 +154,7 @@ thread_init (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
+  thread_sleep_init();
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);

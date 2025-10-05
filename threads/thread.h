@@ -102,6 +102,15 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
+/* Massive with sleeping threads*/
+struct sleeping_threads
+{
+   struct thread* thread;
+   int64_t wakeup_time;
+};
+void insert_sleeping_thread(struct thread* thread, int64_t wakeup_time);
+static void delete_aweken_threads(int64_t current_tick);
+void thread_wakeup(int64_t current_tick);
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
