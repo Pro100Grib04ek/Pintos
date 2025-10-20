@@ -35,6 +35,10 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+/* list for all threads, becouse i can't find new thread in
+all list for threads-pause-resume test */
+struct thread* my_all_list[100]; // let's try with 100 Max active threads
+static size_t threads_count = 0; // Counter for all threads
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -77,6 +81,33 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+struct thread* get_thread(tid_t tid);
+
+/* get thread pointer from tid */
+struct thread*
+get_thread(tid_t tid)
+{
+  enum intr_level old_level = intr_disable();
+  
+  if (thread_current()->tid == tid)
+  {
+    intr_set_level(old_level);
+    return thread_current();
+  }
+  struct thread* t;
+  struct list_elem* id;
+  for (id = list_begin(&all_list); id != list_end(&all_list) ; id = list_next(id))
+  {
+    t = list_entry(id, struct thread, allelem);
+    if (t->tid == tid)
+    {
+      //intr_set_level(old_level);
+      return t;
+    }
+  }
+  intr_set_level(old_level);
+  return NULL ;
+}
 
 /* Functions to control sleeping threads massive */
 /* Function to insert new thread to sleeping_list */
@@ -122,11 +153,11 @@ static void delete_aweken_threads(int64_t current_tick)
   sleep_count -= i;
 }
 
-static void 
-thread_sleep_init(void)
-{
-  sleep_count = 0;
-}
+// static void 
+// thread_sleep_init(void)
+// {
+//   sleep_count = 0;
+// }
 
 void
 thread_wakeup(int64_t current_tick)
@@ -154,7 +185,7 @@ thread_init (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
-  thread_sleep_init();
+  //thread_sleep_init();
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
@@ -250,6 +281,10 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
+  /* add thread to my_all_list */
+  my_all_list[threads_count] = &t;
+  threads_count++;
+
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
      member cannot be observed. */
@@ -314,6 +349,57 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+}
+
+/* pause thread execution; using tid */
+void
+thread_pause(tid_t tid)
+{
+  enum intr_level old_level = intr_disable();
+  if (tid == TID_ERROR)
+  {
+    msg("Tid error");
+    intr_set_level(old_level);
+    return NULL;
+  }
+
+  struct thread* th = get_thread(tid);
+
+  if (th == NULL)
+  {
+    msg("Don't found thread");
+    intr_set_level(old_level);
+    return NULL;
+  }
+
+  if (th->status == THREAD_RUNNING || th->status == THREAD_READY)
+  {
+    list_remove(&th->elem);
+    th->status = THREAD_BLOCKED;
+    if (th == thread_current())
+    {
+      schedule ();
+    }
+  }
+  intr_set_level(old_level);
+  // enum intr_level old_level = intr_disable();
+  // th->status = THREAD_BLOCKED;
+  // schedule();
+  // intr_set_level(old_level);
+}
+
+/* resume thread execution; using tid */
+void
+thread_resume(tid_t tid)
+{
+  struct thread* t = get_thread(tid);
+  enum intr_level old_level = intr_disable();
+  if (t != NULL && t->status == THREAD_BLOCKED)
+  {
+    //t->status = THREAD_READY;
+    thread_unblock(t);
+  }
+  intr_set_level(old_level);
 }
 
 /* Returns the name of the running thread. */
