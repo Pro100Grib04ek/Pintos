@@ -52,6 +52,7 @@ sema_init (struct semaphore *sema, unsigned value)
   list_init (&sema->waiters);
 }
 
+/* --- */
 /* Down or "P" operation on a semaphore.  Waits for SEMA's value
    to become positive and then atomically decrements it.
 
@@ -76,6 +77,7 @@ sema_down (struct semaphore *sema)
   sema->value--;
   intr_set_level (old_level);
 }
+/* --- */
 
 /* Down or "P" operation on a semaphore, but only if the
    semaphore is not already 0.  Returns true if the semaphore is
@@ -103,6 +105,7 @@ sema_try_down (struct semaphore *sema)
   return success;
 }
 
+/* --- */
 /* Up or "V" operation on a semaphore.  Increments SEMA's value
    and wakes up one thread of those waiting for SEMA, if any.
 
@@ -129,6 +132,7 @@ sema_up (struct semaphore *sema)
   intr_set_level (old_level);
   
 }
+/* --- */
 
 static void sema_test_helper (void *sema_);
 
@@ -192,6 +196,7 @@ lock_init (struct lock *lock)
   lock->is_donated=false;
 }
 
+/* --- */
 /* Acquires LOCK, sleeping until it becomes available if
    necessary.  The lock must not already be held by the current
    thread.
@@ -210,7 +215,7 @@ lock_acquire (struct lock *lock)
   
   if(lock->holder != NULL)
   {
-    thread_current()->waiting_for= lock;
+    thread_current()->waiting_for = lock;
     if(lock->holder->priority < thread_current()->priority)
     {  struct thread *temp=thread_current();
        while(temp->waiting_for!=NULL)
@@ -233,6 +238,7 @@ lock_acquire (struct lock *lock)
   lock->holder = thread_current ();
   lock->holder->waiting_for=NULL;
 }
+/* --- */
 
 /* Tries to acquires LOCK and returns true if successful or false
    on failure.  The lock must not already be held by the current
@@ -255,6 +261,7 @@ lock_try_acquire (struct lock *lock)
   return success;
 }
 
+/* --- */
 /* Releases LOCK, which must be owned by the current thread.
 
    An interrupt handler cannot acquire a lock, so it does not
@@ -285,6 +292,7 @@ lock_release (struct lock *lock)
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
+/* --- */
 
 /* Returns true if the current thread holds LOCK, false
    otherwise.  (Note that testing whether some other thread holds

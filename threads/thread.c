@@ -72,6 +72,37 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+void insert_ready_thread(struct thread* t);
+
+/* insert thread with READY status to ready_list
+save decreasing sort by priority
+if several threads with equal priority:
+inserts to last position on the border with next priority
+for example inserting new thread with priority = 40;
+ready_list = [60, 60, 40, 40, \insert_here/ , 30, 20] */
+void insert_ready_thread(struct thread* t)
+{
+  enum intr_level old_level = intr_disable();
+
+  int pri_t = t->priority;
+  struct list_elem* i;
+  for (i = list_begin(&ready_list) ; i != list_end(&ready_list) ; i = list_next(i))
+  {
+    struct thread* thread_i = list_entry(i, struct thread, elem);
+    //msg("%s : %d\n", thread_i->name , thread_i->priority);
+    if (thread_i->priority < pri_t)
+    {
+      list_insert(i, &t->elem);
+      intr_set_level(old_level);
+      return;
+    }
+  }
+  list_push_back(&ready_list, &t->elem); // if thread t have lowest priority 
+
+  intr_set_level(old_level);
+  return;
+}
+/* --- */
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -231,6 +262,7 @@ thread_block (void)
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
+/* --- */
 void
 thread_unblock (struct thread *t) 
 {
@@ -240,10 +272,11 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, compare_priority, 0);
+  insert_ready_thread(t);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
+/* --- */
 
 /* Returns the name of the running thread. */
 const char *
@@ -299,6 +332,7 @@ thread_exit (void)
   NOT_REACHED ();
 }
 
+/* --- */
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
 void
@@ -311,11 +345,12 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread)
-    list_insert_ordered (&ready_list, &cur->elem, compare_priority, 0);
+    insert_ready_thread(cur);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
 }
+/* --- */
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
    This function must be called with interrupts off. */
@@ -597,7 +632,7 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-
+/* --- */
 /* Compares the priority of the two threards and returns true if priority 
    of first thread is greater than the second thread. */
 bool compare_priority(struct list_elem *l1, struct list_elem *l2,void *aux)
@@ -614,22 +649,25 @@ bool compare_priority(struct list_elem *l1, struct list_elem *l2,void *aux)
 {
   list_sort(&ready_list, compare_priority, 0);
 }
+/* --- */
 
+/* --- */
 /* Searches the stack of Donation priority list for the priority of the donor
    thread to remove it from the list and change the current priority 
    accordingly*/
 void search_array(struct thread *cur,int elem)
-{ int found=0;
-  for(int i=0;i<(cur->size)-1;i++)
+{ int found = 0;
+  for(int i = 0 ; i < (cur->size)-1 ; i++)
   {
-  if(cur->priorities[i]==elem)
+  if(cur->priorities[i] == elem)
     {
-     found=1;
+     found = 1;
     }
-  if(found==1)
+  if(found == 1)
     {
-     cur->priorities[i]=cur->priorities[i+1];
+     cur->priorities[i] = cur->priorities[i+1];
     }
   }
-  cur->size -=1;
+  cur->size--;
 }
+/* --- */
