@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include "threads/palloc.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"

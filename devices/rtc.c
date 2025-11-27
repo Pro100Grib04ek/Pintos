@@ -1,5 +1,6 @@
 #include "devices/rtc.h"
 #include <stdio.h>
+#include <stdarg.h>
 #include "threads/io.h"
 
 /* This code is an interface to the MC146818A-compatible real

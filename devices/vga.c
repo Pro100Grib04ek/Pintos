@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdarg.h>
 #include "devices/speaker.h"
 #include "threads/io.h"
 #include "threads/interrupt.h"

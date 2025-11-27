@@ -1,9 +1,11 @@
+
 #include "threads/thread.h"
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -20,13 +22,6 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
-/* Sleeping threads massive - is static 
-then we need to limit threads */
-#define MAX_SLEEPING_THREADS 100
-
-static struct sleeping_threads sleeping_list[MAX_SLEEPING_THREADS];
-static size_t sleep_count = 0; // Counter for sleeping threads
-
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -35,10 +30,6 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
-/* list for all threads, becouse i can't find new thread in
-all list for threads-pause-resume test */
-struct thread* my_all_list[100]; // let's try with 100 Max active threads
-static size_t threads_count = 0; // Counter for all threads
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -81,91 +72,6 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-struct thread* get_thread(tid_t tid);
-
-/* get thread pointer from tid */
-struct thread*
-get_thread(tid_t tid)
-{
-  enum intr_level old_level = intr_disable();
-  
-  if (thread_current()->tid == tid)
-  {
-    intr_set_level(old_level);
-    return thread_current();
-  }
-  struct thread* t;
-  struct list_elem* id;
-  for (id = list_begin(&all_list); id != list_end(&all_list) ; id = list_next(id))
-  {
-    t = list_entry(id, struct thread, allelem);
-    if (t->tid == tid)
-    {
-      //intr_set_level(old_level);
-      return t;
-    }
-  }
-  intr_set_level(old_level);
-  return NULL ;
-}
-
-/* Functions to control sleeping threads massive */
-/* Function to insert new thread to sleeping_list */
-void insert_sleeping_thread(struct thread* thread, int64_t wakeup_time)
-{
-  ASSERT(intr_get_level()==INTR_OFF);
-
-  if (sleep_count >= MAX_SLEEPING_THREADS)
-  {
-    PANIC("too much sleeping threads!");
-  }
-
-  size_t i = sleep_count; // i - index for insert new sleeping thread
-  while (i > 0 && sleeping_list[i-1].wakeup_time > wakeup_time)
-  {
-    sleeping_list[i] = sleeping_list[i-1];
-    i--;
-  }
-
-  sleeping_list[i].thread = thread;
-  sleeping_list[i].wakeup_time = wakeup_time;
-  sleep_count++;
-};
-
-/* Function to delete aweked threads */
-static void delete_aweken_threads(int64_t current_tick)
-{
-  ASSERT(intr_get_level()==INTR_OFF);
-
-  size_t i = 0;
-  while (i < sleep_count && sleeping_list[i].wakeup_time <= current_tick)
-  {
-    thread_unblock(sleeping_list[i].thread);
-    i++;
-  }
-  if (i > 0)
-  {
-    for (size_t j = 0; j < sleep_count-i; j++)
-    {
-      sleeping_list[j] = sleeping_list[i+j];
-    }
-  }
-  sleep_count -= i;
-}
-
-// static void 
-// thread_sleep_init(void)
-// {
-//   sleep_count = 0;
-// }
-
-void
-thread_wakeup(int64_t current_tick)
-{
-  enum intr_level old_level = intr_disable();
-  delete_aweken_threads(current_tick);
-  intr_set_level(old_level);
-}
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -185,7 +91,6 @@ thread_init (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
-  //thread_sleep_init();
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
@@ -268,7 +173,6 @@ thread_create (const char *name, int priority,
   struct switch_entry_frame *ef;
   struct switch_threads_frame *sf;
   tid_t tid;
-  enum intr_level old_level;
 
   ASSERT (function != NULL);
 
@@ -280,15 +184,6 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-
-  /* add thread to my_all_list */
-  my_all_list[threads_count] = &t;
-  threads_count++;
-
-  /* Prepare thread for first run by initializing its stack.
-     Do this atomically so intermediate values for the 'stack' 
-     member cannot be observed. */
-  old_level = intr_disable ();
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -305,10 +200,9 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  intr_set_level (old_level);
-
   /* Add to run queue. */
   thread_unblock (t);
+  thread_yield();
 
   return tid;
 }
@@ -346,60 +240,9 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, compare_priority, 0);
   t->status = THREAD_READY;
   intr_set_level (old_level);
-}
-
-/* pause thread execution; using tid */
-void
-thread_pause(tid_t tid)
-{
-  enum intr_level old_level = intr_disable();
-  if (tid == TID_ERROR)
-  {
-    msg("Tid error");
-    intr_set_level(old_level);
-    return NULL;
-  }
-
-  struct thread* th = get_thread(tid);
-
-  if (th == NULL)
-  {
-    msg("Don't found thread");
-    intr_set_level(old_level);
-    return NULL;
-  }
-
-  if (th->status == THREAD_RUNNING || th->status == THREAD_READY)
-  {
-    list_remove(&th->elem);
-    th->status = THREAD_BLOCKED;
-    if (th == thread_current())
-    {
-      schedule ();
-    }
-  }
-  intr_set_level(old_level);
-  // enum intr_level old_level = intr_disable();
-  // th->status = THREAD_BLOCKED;
-  // schedule();
-  // intr_set_level(old_level);
-}
-
-/* resume thread execution; using tid */
-void
-thread_resume(tid_t tid)
-{
-  struct thread* t = get_thread(tid);
-  enum intr_level old_level = intr_disable();
-  if (t != NULL && t->status == THREAD_BLOCKED)
-  {
-    //t->status = THREAD_READY;
-    thread_unblock(t);
-  }
-  intr_set_level(old_level);
 }
 
 /* Returns the name of the running thread. */
@@ -467,8 +310,8 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+  if (cur != idle_thread)
+    list_insert_ordered (&ready_list, &cur->elem, compare_priority, 0);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -495,7 +338,12 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  thread_current()->priorities[0] = new_priority;
+  if(thread_current()->size==1)
+  { 
+    thread_current ()->priority = new_priority;
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -611,6 +459,8 @@ is_thread (struct thread *t)
 static void
 init_thread (struct thread *t, const char *name, int priority)
 {
+  enum intr_level old_level;
+
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
@@ -620,8 +470,17 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+ 
+ /* Make list of priorities and not the number of 
+    locks with each thread*/
+  t->priorities[0] = priority;
+  t->donation_no=0;
+  t->size = 1;
   t->magic = THREAD_MAGIC;
+  t->waiting_for=NULL;
+  old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
+  intr_set_level (old_level);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -737,3 +596,40 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+
+/* Compares the priority of the two threards and returns true if priority 
+   of first thread is greater than the second thread. */
+bool compare_priority(struct list_elem *l1, struct list_elem *l2,void *aux)
+{ 
+  struct thread *t1 = list_entry(l1,struct thread,elem);
+  struct thread *t2 = list_entry(l2,struct thread,elem);
+  if( t1->priority > t2->priority)
+    return true;
+  return false;
+}
+
+/*Sorts the ready_list present in thread.c*/
+ void sort_ready_list(void)
+{
+  list_sort(&ready_list, compare_priority, 0);
+}
+
+/* Searches the stack of Donation priority list for the priority of the donor
+   thread to remove it from the list and change the current priority 
+   accordingly*/
+void search_array(struct thread *cur,int elem)
+{ int found=0;
+  for(int i=0;i<(cur->size)-1;i++)
+  {
+  if(cur->priorities[i]==elem)
+    {
+     found=1;
+    }
+  if(found==1)
+    {
+     cur->priorities[i]=cur->priorities[i+1];
+    }
+  }
+  cur->size -=1;
+}

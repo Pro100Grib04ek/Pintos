@@ -1,6 +1,7 @@
 #include "devices/pit.h"
 #include <debug.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include "threads/interrupt.h"
 #include "threads/io.h"
 

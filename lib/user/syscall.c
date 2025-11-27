@@ -20,10 +20,10 @@
         ({                                                               \
           int retval;                                                    \
           asm volatile                                                   \
-            ("pushl %2; pushl %1; int $0x30; addl $8, %%esp" \
+            ("pushl %[arg0]; pushl %[number]; int $0x30; addl $8, %%esp" \
                : "=a" (retval)                                           \
-               : "r" (NUMBER),                                  \
-                 "r" (ARG0)                                       \
+               : [number] "i" (NUMBER),                                  \
+                 [arg0] "g" (ARG0)                                       \
                : "memory");                                              \
           retval;                                                        \
         })
@@ -34,12 +34,12 @@
         ({                                                      \
           int retval;                                           \
           asm volatile                                          \
-            ("pushl %3; pushl %2; "                   \
-             "pushl %1; int $0x30; addl $12, %%esp"      \
+            ("pushl %[arg1]; pushl %[arg0]; "                   \
+             "pushl %[number]; int $0x30; addl $12, %%esp"      \
                : "=a" (retval)                                  \
-               : "r" (NUMBER),                         \
-                 "r" (ARG0),                             \
-                 "r" (ARG1)                              \
+               : [number] "i" (NUMBER),                         \
+                 [arg0] "r" (ARG0),                             \
+                 [arg1] "r" (ARG1)                              \
                : "memory");                                     \
           retval;                                               \
         })
@@ -50,13 +50,13 @@
         ({                                                      \
           int retval;                                           \
           asm volatile                                          \
-            ("pushl %4; pushl %3; pushl %2; "    \
-             "pushl %1; int $0x30; addl $16, %%esp"      \
+            ("pushl %[arg2]; pushl %[arg1]; pushl %[arg0]; "    \
+             "pushl %[number]; int $0x30; addl $16, %%esp"      \
                : "=a" (retval)                                  \
-               : "r" (NUMBER),                         \
-                 "r" (ARG0),                             \
-                 "r" (ARG1),                             \
-                 "r" (ARG2)                              \
+               : [number] "i" (NUMBER),                         \
+                 [arg0] "r" (ARG0),                             \
+                 [arg1] "r" (ARG1),                             \
+                 [arg2] "r" (ARG2)                              \
                : "memory");                                     \
           retval;                                               \
         })

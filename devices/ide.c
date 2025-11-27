@@ -3,6 +3,7 @@
 #include <debug.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include "devices/block.h"
 #include "devices/partition.h"
 #include "devices/timer.h"

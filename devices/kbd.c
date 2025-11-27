@@ -3,6 +3,7 @@
 #include <debug.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include "devices/input.h"
 #include "devices/shutdown.h"
 #include "threads/interrupt.h"
